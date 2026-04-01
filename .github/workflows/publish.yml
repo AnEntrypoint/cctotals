@@ -15,11 +15,11 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
       
-      - name: Bump version and publish
+      - name: Publish
         run: |
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
           npm install -g npm
-          VERSION=$(npm version patch --git-tag-version=false)
-          echo "Publishing version: $VERSION"
+          npm version patch --git-tag-version=false
           npm publish --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
