@@ -12,7 +12,6 @@ if (!fs.existsSync(statsPath)) {
 
 const stats = JSON.parse(fs.readFileSync(statsPath, 'utf8'));
 
-// Claude API pricing per 1M tokens (input/output USD)
 const MODEL_PRICING = {
   'haiku-4-5': { input: 1, output: 5, base: 1 },
   'haiku-3-5': { input: 0.8, output: 4, base: 0.8 },
@@ -66,56 +65,47 @@ const grandRaw = sortedWeeks.reduce((sum, w) => sum + weeklyTokens[w].rawTokens,
 const grandWeighted = sortedWeeks.reduce((sum, w) => sum + weeklyTokens[w].weightedTokens, 0);
 
 // Colors
-const cy = (t) => `\x1b[33m${t}\x1b[0m`;
-const cm = (t) => `\x1b[35m${t}\x1b[0m`;
-const cc = (t) => `\x1b[36m${t}\x1b[0m`;
-const cg = (t) => `\x1b[32m${t}\x1b[0m`;
-const ch = (t) => `\x1b[36m${t}\x1b[0m`;
+const L = {
+  y: '\x1b[33m', m: '\x1b[35m', c: '\x1b[36m', g: '\x1b[32m', h: '\x1b[36m', r: '\x1b[0m'
+};
 
-// Fixed column layout
-const W = process.stdout.columns || 100;
-const INDENT = '  ';
-const WEEK_COL = 11;
-const WEIGHTED_COL = 14;
-const RAW_COL = 12;
-const BAR_START = INDENT.length + WEEK_COL + WEIGHTED_COL + RAW_COL + 4;
-const BAR_COL = W - BAR_START - 1;
+const fmt = (n) => Math.round(n).toLocaleString();
+const pad = (s, n) => String(s).padEnd(n);
+const padn = (n, w) => fmt(n).padStart(w);
 
-function pad(str, n) {
-  return String(str).padEnd(n).slice(0, n);
-}
-function padNum(n, len) {
-  return String(Math.round(n).toLocaleString()).padStart(len);
+// Fixed columns - main row
+const W_COL = 10, WT_COL = 14, RW_COL = 13, BARS = 36;
+
+function weekLine(week, weighted, raw) {
+  const barLen = Math.max(1, Math.floor((weighted / maxWeighted) * BARS));
+  return `${L.y}  ${pad(week, W_COL)}  ${L.m}${padn(weighted, WT_COL)}  ${padn(raw, RW_COL)}  ${L.g}${'█'.repeat(barLen)}${' '.repeat(BARS - barLen)}${L.r}`;
 }
 
-console.log(`\n${ch('═').repeat(W)}\n${ch('  WEEKLY TOKEN USAGE & COST ESTIMATE')}\n${ch('═').repeat(W)}\n`);
+function modelLine(model, weighted, raw, pct, price) {
+  const modelShort = pad(getShortName(model), W_COL);
+  return `${L.c}    ${modelShort}  ${L.c}${padn(weighted, WT_COL)}  ${L.m}${padn(raw, RW_COL)}  ${pct.padStart(3)}%  ${price}`;
+}
 
-// Header
-const hdr = `${cy(INDENT + pad('Week', WEEK_COL) + ' ' + pad('Weighted', WEIGHTED_COL) + ' ' + pad('Raw', RAW_COL))}`;
-console.log(`${hdr} ${cy('─').repeat(BAR_COL)} Bar`);
-console.log(`${cy(INDENT + '─'.repeat(WEEK_COL) + ' ' + '─'.repeat(WEIGHTED_COL) + ' ' + '─'.repeat(RAW_COL))} ${cy('─').repeat(BAR_COL)}`);
+const HR = `${L.y}  ${'─'.repeat(W_COL)}  ${'─'.repeat(WT_COL)}  ${'─'.repeat(RW_COL)}  ${'─'.repeat(BARS)}${L.r}`;
+const HDR = `${L.y}  ${pad('Week', W_COL)}  ${pad('Weighted', WT_COL)}  ${pad('Raw', RW_COL)}  ${'─'.repeat(BARS)}${L.r}`;
 
-// Data rows
+console.log(`\n${L.h}  WEEKLY TOKEN USAGE & COST ESTIMATE${L.r}`);
+console.log(`${L.h}  ${'─'.repeat(W_COL + WT_COL + RW_COL + BARS + 14)}${L.r}\n`);
+console.log(HDR);
+console.log(HR);
+
 for (const week of sortedWeeks) {
   const data = weeklyTokens[week];
-  const barLen = Math.max(1, Math.floor((data.weightedTokens / maxWeighted) * BAR_COL));
-  const bar = cg('█'.repeat(barLen));
-  
-  console.log(`${INDENT}${cy(pad(week, WEEK_COL))} ${cm(padNum(data.weightedTokens, WEIGHTED_COL))} ${cm(padNum(data.rawTokens, RAW_COL))} ${bar}`);
-  
-  // Model sub-rows
+  console.log(weekLine(week, data.weightedTokens, data.rawTokens));
   const models = Object.entries(data.byModel).sort((a, b) => b[1].weighted - a[1].weighted);
   for (const [model, info] of models) {
-    const shortModel = pad(getShortName(model), WEEK_COL);
     const pct = ((info.weighted / data.weightedTokens) * 100).toFixed(0);
-    const priceStr = `$${info.pricing.input}/${info.pricing.output}`;
-    console.log(`    ${cc(shortModel)} ${cc(padNum(info.weighted, WEIGHTED_COL))} ${cm(padNum(info.tokens, RAW_COL))} ${pct.padStart(3)}% ${priceStr}`);
+    const price = `$${info.pricing.input}/${info.pricing.output}`;
+    console.log(modelLine(model, info.weighted, info.tokens, pct, price));
   }
 }
 
-console.log(`${cy(INDENT + '─'.repeat(WEEK_COL) + ' ' + '─'.repeat(WEIGHTED_COL) + ' ' + '─'.repeat(RAW_COL))} ${cy('─').repeat(BAR_COL)}`);
-
-// Stats
-console.log(`\n${INDENT}${ch('Total:')}    ${cm(padNum(grandWeighted, WEIGHTED_COL))} weighted`);
-console.log(`${INDENT}${ch('Raw:')}       ${cm(padNum(grandRaw, WEIGHTED_COL))} raw tokens`);
-console.log(`${INDENT}${ch('Avg/week:')}  ${cm(padNum(Math.round(grandWeighted / sortedWeeks.length), WEIGHTED_COL))} weighted\n`);
+console.log(HR);
+console.log(`\n${L.h}  Total:    ${L.m}${padn(grandWeighted, WT_COL)}${L.r} weighted`);
+console.log(`${L.h}  Raw:      ${L.m}${padn(grandRaw, WT_COL)}${L.r} tokens`);
+console.log(`${L.h}  Avg/week: ${L.m}${padn(grandWeighted / sortedWeeks.length, WT_COL)}${L.r} weighted\n`);
