@@ -7,7 +7,6 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    if: "! contains(github.event.head_commit.message, 'version bump')"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,17 +18,35 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
       
-      - name: Bump version
+      - name: Get current version
+        id: version
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Bump and publish
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           npm install -g npm
-          npm version patch -m "version bump [skip ci]"
-          git push origin HEAD:main --tags
-      
-      - name: Publish
-        run: |
-          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
-          npm publish --access public
+          
+          # Get current version before bump
+          CURRENT=${{ steps.version.outputs.current }}
+          
+          # Bump version
+          npm version patch
+          
+          # Get new version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          
+          # If versions differ, push and publish
+          if [ "$CURRENT" != "$NEW_VERSION" ]; then
+            echo "Bumped $CURRENT -> $NEW_VERSION"
+            git push origin HEAD:main --tags
+            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
+            npm publish --access public
+          else
+            echo "No version change needed (already bumped)"
+          fi
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
