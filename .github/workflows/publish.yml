@@ -17,35 +17,29 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
       
-      - name: Get current version
-        id: version
+      - name: Check if already published
+        id: check
         run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          # Get current package version
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          
+          # Check if this version tag exists
+          if git tag | grep -q "^v$CURRENT$"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
       
       - name: Bump and publish
+        if: steps.check.outputs.exists == 'false'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           npm install -g npm
-          
-          # Get current version before bump
-          CURRENT=${{ steps.version.outputs.current }}
-          
-          # Bump version
           npm version patch
-          
-          # Get new version
-          NEW_VERSION=$(node -p "require('./package.json').version")
-          
-          # If versions differ, push and publish
-          if [ "$CURRENT" != "$NEW_VERSION" ]; then
-            echo "Bumped $CURRENT -> $NEW_VERSION"
-            git push origin HEAD:main --tags
-            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
-            npm publish --access public
-          else
-            echo "No version change needed (already bumped)"
-          fi
+          git push origin HEAD:main --tags
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
+          npm publish --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
