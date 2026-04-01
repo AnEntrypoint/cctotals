@@ -1,5 +1,5 @@
 {
-  "name": "@anentrypoint/cctotals",
+  "name": "cctotals",
   "version": "1.0.0",
   "description": "Analyze and visualize Claude Code token usage with weekly graphs",
   "main": "token-graph.js",
