@@ -12,23 +12,18 @@ if (!fs.existsSync(statsPath)) {
 
 const stats = JSON.parse(fs.readFileSync(statsPath, 'utf8'));
 
-// Group daily tokens into weeks
 function getWeekKey(dateStr) {
   const date = new Date(dateStr);
   const day = date.getDay();
   const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-  const weekStart = new Date(date.setDate(diff));
-  return weekStart.toISOString().split('T')[0];
+  return new Date(date.setDate(diff)).toISOString().split('T')[0];
 }
 
 const weeklyTokens = {};
 
 for (const dayData of stats.dailyModelTokens) {
   const weekKey = getWeekKey(dayData.date);
-  if (!weeklyTokens[weekKey]) {
-    weeklyTokens[weekKey] = { total: 0, byModel: {} };
-  }
-  
+  if (!weeklyTokens[weekKey]) weeklyTokens[weekKey] = { total: 0, byModel: {} };
   for (const [model, tokens] of Object.entries(dayData.tokensByModel)) {
     weeklyTokens[weekKey].total += tokens;
     weeklyTokens[weekKey].byModel[model] = (weeklyTokens[weekKey].byModel[model] || 0) + tokens;
@@ -37,57 +32,49 @@ for (const dayData of stats.dailyModelTokens) {
 
 const sortedWeeks = Object.keys(weeklyTokens).sort();
 const maxTokens = Math.max(...sortedWeeks.map(w => weeklyTokens[w].total));
+const grandTotal = sortedWeeks.reduce((sum, w) => sum + weeklyTokens[w].total, 0);
 
-// Colors
+const W = process.stdout.columns || 80;
 const c = {
-  hdr: '\x1b[36m',
-  lbl: '\x1b[33m',
-  bar: '\x1b[32m',
-  num: '\x1b[35m',
-  res: '\x1b[0m'
+  h: '\x1b[36m',  // header
+  y: '\x1b[33m',  // yellow (labels)
+  g: '\x1b[32m',  // green (bars)
+  m: '\x1b[35m',   // magenta (numbers)
+  r: '\x1b[0m'    // reset
 };
 
-// Terminal width
-const W = process.stdout.columns || 80;
-const CHART_W = Math.min(50, W - 30);
-const PAD = Math.floor((W - CHART_W - 30) / 2);
+// Fixed-width columns
+const WEEK_W = 12;
+const TOKEN_W = 12;
+const BAR_W = Math.min(40, W - WEEK_W - TOKEN_W - 8);
 
 // Header
-console.log('\n' + c.hdr + '═'.repeat(W));
-console.log(' '.repeat(PAD) + 'WEEKLY TOKEN USAGE GRAPH');
-console.log('═'.repeat(W) + c.res);
-console.log();
+console.log(`\n${c.h}${'═'.repeat(W)}\n  WEEKLY TOKEN USAGE\n${'═'.repeat(W)}${c.r}\n`);
 
 // Column headers
-const hdr = '  Week         Tokens';
-console.log(c.lbl + hdr + ' '.repeat(CHART_W - hdr.length + 5) + '| Bar' + c.res);
-console.log(c.lbl + '─'.repeat(W) + c.res);
+console.log(`${c.y}  ${'Week'.padEnd(WEEK_W)} ${'Tokens'.padEnd(TOKEN_W)} ${'─'.repeat(BAR_W)}${c.r}`);
+console.log(`${c.y}  ${'─'.repeat(WEEK_W)} ${'─'.repeat(TOKEN_W)} ${'─'.repeat(BAR_W)}${c.r}`);
 
-let grandTotal = 0;
+// Data rows
 for (const week of sortedWeeks) {
   const data = weeklyTokens[week];
-  const barLen = Math.max(1, Math.floor((data.total / maxTokens) * CHART_W));
+  const barLen = Math.max(1, Math.floor((data.total / maxTokens) * BAR_W));
+  const bar = c.g + '█'.repeat(barLen) + c.r;
   
-  // Format: week left-aligned, tokens right-aligned
-  const weekStr = week;
-  const tokenStr = data.total.toLocaleString();
-  const bar = c.bar + '█'.repeat(barLen) + c.res;
-  
-  const line = `  ${c.lbl}${weekStr}${c.res}  ${c.num}${tokenStr}${c.res}  ${bar}`;
+  const line = `  ${c.y}${week.padEnd(WEEK_W)}${c.r} ${c.m}${data.total.toLocaleString().padStart(TOKEN_W)}${c.r} ${bar}`;
   console.log(line);
-  grandTotal += data.total;
 }
 
-console.log(c.lbl + '─'.repeat(W) + c.res);
+console.log(`${c.y}  ${'─'.repeat(WEEK_W)} ${'─'.repeat(TOKEN_W)} ${'─'.repeat(BAR_W)}${c.r}`);
 
+// Stats
 const avg = Math.round(grandTotal / sortedWeeks.length);
-console.log(`\n  Total:   ${c.num}${grandTotal.toLocaleString()}${c.res} tokens (${sortedWeeks.length} weeks)`);
-console.log(`  Average: ${c.num}${avg.toLocaleString()}${c.res} tokens/week`);
-console.log('\n' + c.hdr + '═'.repeat(W) + c.res + '\n');
+console.log(`\n  Total:   ${c.m}${grandTotal.toLocaleString().padStart(TOKEN_W)}${c.r} tokens`);
+console.log(`  Average: ${c.m}${avg.toLocaleString().padStart(TOKEN_W)}${c.r} tokens/week`);
+console.log(`  Weeks:   ${c.m}${sortedWeeks.length}${c.r}\n`);
 
 // Model breakdown
-console.log(c.hdr + '  MODEL BREAKDOWN' + c.res);
-console.log(c.lbl + '─'.repeat(W) + c.res);
+console.log(`${c.h}  MODEL BREAKDOWN\n${'═'.repeat(W)}${c.r}\n`);
 
 const modelTotals = {};
 for (const week of sortedWeeks) {
@@ -96,10 +83,12 @@ for (const week of sortedWeeks) {
   }
 }
 
-const maxModelLen = Math.max(...Object.keys(modelTotals).map(m => m.length));
+const maxModelLen = Math.max(20, ...Object.keys(modelTotals).map(m => m.length));
+console.log(`${c.y}  ${'Model'.padEnd(maxModelLen)} ${'Tokens'.padEnd(TOKEN_W)} %${c.r}`);
+console.log(`${c.y}  ${'─'.repeat(maxModelLen)} ${'─'.repeat(TOKEN_W)} ────${c.r}`);
+
 for (const [model, tokens] of Object.entries(modelTotals)) {
   const pct = ((tokens / grandTotal) * 100).toFixed(1);
-  const padded = model.padEnd(maxModelLen);
-  console.log(`  ${c.lbl}${padded}${c.res}  ${c.num}${tokens.toLocaleString()}${c.res}  (${pct}%)`);
+  console.log(`  ${c.y}${model.padEnd(maxModelLen)}${c.r} ${c.m}${tokens.toLocaleString().padStart(TOKEN_W)}${c.r} ${pct.padStart(6)}%`);
 }
 console.log();
