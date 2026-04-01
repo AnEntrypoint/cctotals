@@ -1,6 +1,6 @@
 {
   "name": "cctotals",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Analyze and visualize Claude Code token usage with weekly graphs",
   "main": "token-graph.js",
   "bin": {
