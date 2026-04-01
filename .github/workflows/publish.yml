@@ -17,8 +17,12 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
       
-      - name: Setup npm auth
-        run: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
+      - name: Setup git and npm
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
+          npm install -g npm
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       
@@ -38,12 +42,9 @@ jobs:
           # Check if npm already has this version
           if npm view cctotals@$CURRENT version &>/dev/null; then
             echo "Version $CURRENT exists on npm, bumping..."
-            npm install -g npm
             npm version patch
           fi
           
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
           NEW_VERSION=$(node -p "require('./package.json').version")
           echo "Publishing $NEW_VERSION..."
           git push origin HEAD:main --tags
