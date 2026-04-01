@@ -2,6 +2,14 @@
 
 📊 Analyze and visualize your Claude Code token usage with beautiful weekly graphs in the terminal.
 
+## Quick Start
+
+```bash
+bun x cctotals
+# or
+npx cctotals
+```
+
 ## Features
 
 - 📈 Weekly token totals bar chart
@@ -13,12 +21,6 @@
 
 ```bash
 npm install -g cctotals
-```
-
-Or run directly with npx:
-
-```bash
-npx cctotals
 ```
 
 ## Usage
@@ -57,7 +59,7 @@ Reads from Claude Code's telemetry data at `~/.claude/stats-cache.json` and aggr
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 18+ or Bun
 - Claude Code with telemetry enabled
 
 ## License
