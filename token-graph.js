@@ -6,7 +6,7 @@ const path = require('path');
 const statsPath = path.join(process.env.HOME || process.env.USERPROFILE, '.claude', 'stats-cache.json');
 
 if (!fs.existsSync(statsPath)) {
-  console.error('stats-cache.json not found at:', statsPath);
+  console.error('stats-cache.json not found:', statsPath);
   process.exit(1);
 }
 
@@ -31,64 +31,57 @@ for (const dayData of stats.dailyModelTokens) {
 }
 
 const sortedWeeks = Object.keys(weeklyTokens).sort();
-const maxTokens = Math.max(...sortedWeeks.map(w => weeklyTokens[w].total));
+const maxWeekTotal = Math.max(...sortedWeeks.map(w => weeklyTokens[w].total));
 const grandTotal = sortedWeeks.reduce((sum, w) => sum + weeklyTokens[w].total, 0);
 
 const W = process.stdout.columns || 80;
 const c = {
-  h: '\x1b[36m',  // header
-  y: '\x1b[33m',  // yellow (labels)
-  g: '\x1b[32m',  // green (bars)
-  m: '\x1b[35m',   // magenta (numbers)
+  h: '\x1b[36m',  // header cyan
+  y: '\x1b[33m',  // yellow labels
+  g: '\x1b[32m',  // green bars
+  m: '\x1b[35m',   // magenta numbers
+  c: '\x1b[36m',  // cyan models
   r: '\x1b[0m'    // reset
 };
 
-// Fixed-width columns
-const WEEK_W = 12;
-const TOKEN_W = 12;
-const BAR_W = Math.min(40, W - WEEK_W - TOKEN_W - 8);
+// Column widths
+const WEEK_W = 13;
+const TOKEN_W = 13;
+const BAR_W = Math.min(35, W - WEEK_W - TOKEN_W - 10);
 
 // Header
 console.log(`\n${c.h}${'═'.repeat(W)}\n  WEEKLY TOKEN USAGE\n${'═'.repeat(W)}${c.r}\n`);
 
 // Column headers
-console.log(`${c.y}  ${'Week'.padEnd(WEEK_W)} ${'Tokens'.padEnd(TOKEN_W)} ${'─'.repeat(BAR_W)}${c.r}`);
+const hdr = `  ${'Week'.padEnd(WEEK_W)} ${'Tokens'.padEnd(TOKEN_W)}`;
+console.log(`${c.y}${hdr}${' '.repeat(BAR_W)} Bar${c.r}`);
 console.log(`${c.y}  ${'─'.repeat(WEEK_W)} ${'─'.repeat(TOKEN_W)} ${'─'.repeat(BAR_W)}${c.r}`);
 
-// Data rows
+// Data with model breakdown
 for (const week of sortedWeeks) {
   const data = weeklyTokens[week];
-  const barLen = Math.max(1, Math.floor((data.total / maxTokens) * BAR_W));
+  const barLen = Math.max(1, Math.floor((data.total / maxWeekTotal) * BAR_W));
   const bar = c.g + '█'.repeat(barLen) + c.r;
   
-  const line = `  ${c.y}${week.padEnd(WEEK_W)}${c.r} ${c.m}${data.total.toLocaleString().padStart(TOKEN_W)}${c.r} ${bar}`;
-  console.log(line);
+  // Week total row
+  console.log(`  ${c.y}${week.padEnd(WEEK_W)}${c.r} ${c.m}${data.total.toLocaleString().padStart(TOKEN_W)}${c.r} ${bar}`);
+  
+  // Model sub-rows
+  const models = Object.entries(data.byModel).sort((a, b) => b[1] - a[1]);
+  for (const [model, tokens] of models) {
+    const modelBarLen = Math.max(1, Math.floor((tokens / maxWeekTotal) * BAR_W));
+    const modelBar = c.g + '▄'.repeat(modelBarLen) + c.r;
+    const pct = ((tokens / data.total) * 100).toFixed(0);
+    // Shorten model name for display
+    const shortModel = model.replace('claude-', '').replace('-20251001', '');
+    console.log(`    ${c.c}${shortModel.padEnd(WEEK_W - 4)}${c.r} ${c.m}${tokens.toLocaleString().padStart(TOKEN_W)}${c.r} ${pct.padStart(3)}% ${modelBar}`);
+  }
 }
 
 console.log(`${c.y}  ${'─'.repeat(WEEK_W)} ${'─'.repeat(TOKEN_W)} ${'─'.repeat(BAR_W)}${c.r}`);
 
 // Stats
 const avg = Math.round(grandTotal / sortedWeeks.length);
-console.log(`\n  Total:   ${c.m}${grandTotal.toLocaleString().padStart(TOKEN_W)}${c.r} tokens`);
-console.log(`  Average: ${c.m}${avg.toLocaleString().padStart(TOKEN_W)}${c.r} tokens/week`);
-console.log(`  Weeks:   ${c.m}${sortedWeeks.length}${c.r}\n`);
-
-// Model breakdown
-console.log(`${c.h}  MODEL BREAKDOWN\n${'═'.repeat(W)}${c.r}\n`);
-
-const modelTotals = {};
-for (const week of sortedWeeks) {
-  for (const [model, tokens] of Object.entries(weeklyTokens[week].byModel)) {
-    modelTotals[model] = (modelTotals[model] || 0) + tokens;
-  }
-}
-
-const maxModelLen = Math.max(20, ...Object.keys(modelTotals).map(m => m.length));
-console.log(`${c.y}  ${'Model'.padEnd(maxModelLen)} ${'Tokens'.padEnd(TOKEN_W)} %${c.r}`);
-console.log(`${c.y}  ${'─'.repeat(maxModelLen)} ${'─'.repeat(TOKEN_W)} ────${c.r}`);
-
-for (const [model, tokens] of Object.entries(modelTotals)) {
-  const pct = ((tokens / grandTotal) * 100).toFixed(1);
-  console.log(`  ${c.y}${model.padEnd(maxModelLen)}${c.r} ${c.m}${tokens.toLocaleString().padStart(TOKEN_W)}${c.r} ${pct.padStart(6)}%`);
-}
-console.log();
+console.log(`\n  ${c.h}Total:${c.r}   ${c.m}${grandTotal.toLocaleString().padStart(TOKEN_W)}${c.r} tokens`);
+console.log(`  ${c.h}Average:${c.r} ${c.m}${avg.toLocaleString().padStart(TOKEN_W)}${c.r} tokens/week`);
+console.log(`  ${c.h}Weeks:${c.r}   ${c.m}${sortedWeeks.length}${c.r}\n`);
