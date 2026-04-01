@@ -7,19 +7,29 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    if: "! contains(github.event.head_commit.message, 'version bump')"
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
       
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
       
+      - name: Bump version
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          npm install -g npm
+          npm version patch -m "version bump [skip ci]"
+          git push origin HEAD:main --tags
+      
       - name: Publish
         run: |
           echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
-          npm install -g npm
-          npm version patch --git-tag-version=false
           npm publish --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
